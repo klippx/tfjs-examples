@@ -13,7 +13,7 @@ import { System } from './system'
  */
 export class PolicyNetwork {
   public policyNet: tf.Sequential | tf.LayersModel
-  private currentActions_: any
+  private currentActions_: tf.TypedArray
 
   /**
    * Constructor of PolicyNetwork.
@@ -26,6 +26,7 @@ export class PolicyNetwork {
    *   - An instance of tf.LayersModel.
    */
   constructor(hiddenLayerSizesOrModel) {
+    this.currentActions_ = new Uint8Array()
     if (hiddenLayerSizesOrModel instanceof tf.LayersModel) {
       this.policyNet = hiddenLayerSizesOrModel
     } else {
@@ -78,7 +79,7 @@ export class PolicyNetwork {
    * @returns The number of steps completed in the `numGames` games
    *   in this round of training.
    */
-  interface
+
   async train<T extends System>(
     cartPoleSystem: T,
     optimizer: tf.Optimizer,
@@ -172,10 +173,6 @@ export class PolicyNetwork {
         return tf.losses.sigmoidCrossEntropy(labels, logits).asScalar()
       })
     return tf.variableGrads(f)
-  }
-
-  getCurrentActions() {
-    return this.currentActions_
   }
 
   /**

@@ -19,7 +19,6 @@ import * as tf from '@tensorflow/tfjs'
 import * as tfvis from '@tensorflow/tfjs-vis'
 
 import { CartPole } from './cart_pole'
-import { RenderableSystem } from './renderableSystem'
 import { SaveablePolicyNetwork } from './saveablePolicyNetwork'
 import { mean, sum } from './utils'
 
@@ -72,6 +71,8 @@ const stepsContainer = getElementById('steps-container')
 // Module-global instance of policy network.
 let policyNet: SaveablePolicyNetwork | null
 let stopRequested = false
+// Objects and functions to support display of cart pole status during training.
+let renderDuringTraining = true
 
 /**
  * Display a message to the info div.
@@ -80,25 +81,6 @@ let stopRequested = false
  */
 function logStatus(message: string) {
   appStatus.textContent = message
-}
-
-// Objects and functions to support display of cart pole status during training.
-let renderDuringTraining = true
-
-/**
- * A function invoked at the end of every game during training.
- *
- * @param {number} gameCount A count of how many games has completed so far in
- *   the current iteration of training.
- * @param {number} totalGames Total number of games to complete in the current
- *   iteration of training.
- */
-function onGameEnd(gameCount: number, totalGames: number) {
-  iterationStatus.textContent = `Game ${gameCount} of ${totalGames}`
-  iterationProgress.value = (gameCount / totalGames) * 100
-  if (gameCount === totalGames) {
-    iterationStatus.textContent = 'Updating weights...'
-  }
 }
 
 /**
@@ -115,7 +97,7 @@ function onIterationEnd(iterationCount: number, totalIterations: number) {
 }
 
 // Objects and function to support the plotting of game steps during training.
-let meanStepValues: Array<any> = []
+let meanStepValues: Array<{ x: number; y: number }> = []
 function plotSteps() {
   tfvis.render.linechart(
     stepsContainer,
@@ -249,14 +231,19 @@ export async function setUpUI() {
             discountRate,
             gamesPerIteration,
             maxStepsPerGame,
-            async (cartPole: RenderableSystem) => {
+            async (system) => {
               if (renderDuringTraining) {
-                // renderCartPole(cartPole, cartPoleCanvas)
-                cartPole.render(cartPoleCanvas)
+                system.render(cartPoleCanvas)
                 await tf.nextFrame() // Unblock UI thread.
               }
             },
-            onGameEnd
+            (gameCount, totalGames) => {
+              iterationStatus.textContent = `Game ${gameCount} of ${totalGames}`
+              iterationProgress.value = (gameCount / totalGames) * 100
+              if (gameCount === totalGames) {
+                iterationStatus.textContent = 'Updating weights...'
+              }
+            }
           )
           const t1 = new Date().getTime()
           const stepsPerSecond = sum(gameSteps) / ((t1 - t0) / 1e3)
