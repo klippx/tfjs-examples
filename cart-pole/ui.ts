@@ -266,7 +266,7 @@ export async function setUpUI() {
   if ((await SaveablePolicyNetwork.checkStoredModelStatus()) != null) {
     policyNet = await SaveablePolicyNetwork.loadModel()
     logStatus('Loaded policy network from IndexedDB.')
-    hiddenLayerSizesInput.value = policyNet.hiddenLayerSizes()
+    hiddenLayerSizesInput.value = policyNet.hiddenLayerSizes().toString()
   }
   await updateUIControlState()
 
@@ -299,7 +299,7 @@ export async function setUpUI() {
 
   deleteStoredModelButton.addEventListener('click', async () => {
     if (confirm(`Are you sure you want to delete the locally-stored model?`)) {
-      await policyNet.removeModel()
+      await policyNet?.removeModel()
       policyNet = null
       await updateUIControlState()
     }
@@ -310,7 +310,9 @@ export async function setUpUI() {
       stopRequested = true
     } else {
       disableModelControls()
-
+      if (policyNet === null) {
+        throw new Error(`Invalid policyNet: ${policyNet}`)
+      }
       try {
         const trainIterations = Number.parseInt(numIterationsInput.value)
         if (!(trainIterations > 0)) {
@@ -387,6 +389,9 @@ export async function setUpUI() {
     while (!isDone) {
       steps++
       tf.tidy(() => {
+        if (policyNet === null) {
+          throw new Error(`Invalid policyNet: ${policyNet}`)
+        }
         const action = policyNet.getActions(cartPole.getStateTensor())[0]
         logStatus(
           `Test in progress. ` +

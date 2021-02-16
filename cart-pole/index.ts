@@ -37,6 +37,9 @@
 import * as tf from '@tensorflow/tfjs'
 
 import { maybeRenderDuringTraining, onGameEnd, setUpUI } from './ui'
+import { CartPole } from './cart_pole'
+
+declare type Gradient = tf.Tensor | tf.Tensor[]
 
 /**
  * Policy network for controlling the cart-pole system.
@@ -48,6 +51,9 @@ import { maybeRenderDuringTraining, onGameEnd, setUpUI } from './ui'
  *
  */
 class PolicyNetwork {
+  public policyNet: tf.Sequential | tf.LayersModel
+  private currentActions_: any
+
   /**
    * Constructor of PolicyNetwork.
    *
@@ -62,7 +68,7 @@ class PolicyNetwork {
     if (hiddenLayerSizesOrModel instanceof tf.LayersModel) {
       this.policyNet = hiddenLayerSizesOrModel
     } else {
-      this.createPolicyNetwork(hiddenLayerSizesOrModel)
+      this.policyNet = this.createPolicyNetwork(hiddenLayerSizesOrModel)
     }
   }
 
@@ -73,13 +79,14 @@ class PolicyNetwork {
    *   a single number (for a single hidden layer) or an Array of numbers (for
    *   any number of hidden layers).
    */
-  createPolicyNetwork(hiddenLayerSizes) {
+  createPolicyNetwork(hiddenLayerSizes: number | number[]) {
     if (!Array.isArray(hiddenLayerSizes)) {
       hiddenLayerSizes = [hiddenLayerSizes]
     }
-    this.policyNet = tf.sequential()
+    // this.policyNet = tf.sequential()
+    const network = tf.sequential()
     hiddenLayerSizes.forEach((hiddenLayerSize, i) => {
-      this.policyNet.add(
+      network.add(
         tf.layers.dense({
           units: hiddenLayerSize,
           activation: 'elu',
@@ -90,7 +97,8 @@ class PolicyNetwork {
     })
     // The last layer has only one unit. The single output number will be
     // converted to a probability of selecting the leftward-force action.
-    this.policyNet.add(tf.layers.dense({ units: 1 }))
+    network.add(tf.layers.dense({ units: 1 }))
+    return network
   }
 
   /**
@@ -106,26 +114,26 @@ class PolicyNetwork {
    *   update.
    * @param {number} maxStepsPerGame Maximum number of steps to perform during
    *   a game. If this number is reached, the game will end immediately.
-   * @returns {number[]} The number of steps completed in the `numGames` games
+   * @returns The number of steps completed in the `numGames` games
    *   in this round of training.
    */
   async train(
-    cartPoleSystem,
-    optimizer,
-    discountRate,
-    numGames,
-    maxStepsPerGame
+    cartPoleSystem: CartPole,
+    optimizer: tf.Optimizer,
+    discountRate: number,
+    numGames: number,
+    maxStepsPerGame: number
   ) {
-    const allGradients = []
-    const allRewards = []
-    const gameSteps = []
+    const allGradients: { [name: string]: Array<tf.Tensor[]> } = {}
+    const allRewards: Array<number[]> = []
+    const gameSteps: Array<number> = []
     onGameEnd(0, numGames)
     for (let i = 0; i < numGames; ++i) {
       // Randomly initialize the state of the cart-pole system at the beginning
       // of every game.
       cartPoleSystem.setRandomState()
-      const gameRewards = []
-      const gameGradients = []
+      const gameRewards: Array<number> = []
+      const gameGradients: { [name: string]: tf.Tensor[] } = {}
       for (let j = 0; j < maxStepsPerGame; ++j) {
         // For every step of the game, remember gradients of the policy
         // network's weights with respect to the probability of the action
@@ -192,10 +200,11 @@ class PolicyNetwork {
     const f = () =>
       tf.tidy(() => {
         const [logits, actions] = this.getLogitsAndActions(inputTensor)
-        this.currentActions_ = actions.dataSync()
+        const leAction = actions as tf.Tensor<tf.Rank.R2>
+        this.currentActions_ = leAction.dataSync()
         const labels = tf.sub(
           1,
-          tf.tensor2d(this.currentActions_, actions.shape)
+          tf.tensor2d(this.currentActions_, leAction.shape)
         )
         return tf.losses.sigmoidCrossEntropy(labels, logits).asScalar()
       })
@@ -214,15 +223,29 @@ class PolicyNetwork {
    *   1. The logits tensor, of shape `[batchSize, 1]`.
    *   2. The actions tensor, of shape `[batchSize, 1]`.
    */
-  getLogitsAndActions(inputs) {
+  getLogitsAndActions(
+    inputs: tf.Tensor
+  ): [tf.Tensor<tf.Rank>, tf.Tensor<tf.Rank.R2>] {
     return tf.tidy(() => {
-      const logits = this.policyNet.predict(inputs)
+      // FIXME: as tf.Tensor<tf.Rank>
+      const logits = this.policyNet.predict(inputs) as tf.Tensor<tf.Rank>
 
       // Get the probability of the leftward action.
       const leftProb = tf.sigmoid(logits)
+
       // Probabilites of the left and right actions.
-      const leftRightProbs = tf.concat([leftProb, tf.sub(1, leftProb)], 1)
-      const actions = tf.multinomial(leftRightProbs, 1, null, true)
+      // FIXME: as tf.Tensor2D
+      // REVIEW: Is it tf.Tensor1D?
+      const leftRightProbs = tf.concat(
+        [leftProb, tf.sub(1, leftProb)],
+        1
+      ) as tf.Tensor2D
+      const actions = ((tf.multinomial(
+        leftRightProbs,
+        1,
+        undefined,
+        true
+      ) as tf.Tensor2D) as unknown) as tf.Tensor<tf.Rank.R2>
       return [logits, actions]
     })
   }
@@ -234,7 +257,7 @@ class PolicyNetwork {
    * @param {Float32Array} inputs The actions for the inputs, with length
    *   `batchSize`.
    */
-  getActions(inputs) {
+  getActions(inputs: tf.Tensor) {
     return this.getLogitsAndActions(inputs)[1].dataSync()
   }
 
@@ -247,7 +270,10 @@ class PolicyNetwork {
    * @param {{[varName: string]: tf.Tensor}} gradients The new gradients to push
    *   into `record`: a map from variable name to the gradient Tensor.
    */
-  pushGradients(record, gradients) {
+  pushGradients(
+    record: { [varName: string]: Array<Gradient> },
+    gradients: { [varName: string]: Gradient }
+  ) {
     for (const key in gradients) {
       if (key in record) {
         record[key].push(gradients[key])
@@ -270,7 +296,7 @@ export class SaveablePolicyNetwork extends PolicyNetwork {
    *
    * @param {number | number[]} hiddenLayerSizesOrModel
    */
-  constructor(hiddenLayerSizesOrModel) {
+  constructor(hiddenLayerSizesOrModel: number | number[] | tf.LayersModel) {
     super(hiddenLayerSizesOrModel)
   }
 
@@ -284,8 +310,7 @@ export class SaveablePolicyNetwork extends PolicyNetwork {
   /**
    * Load the model fom IndexedDB.
    *
-   * @returns {SaveablePolicyNetwork} The instance of loaded
-   *   `SaveablePolicyNetwork`.
+   * @returns The instance of loaded `SaveablePolicyNetwork`.
    * @throws {Error} If no model can be found in IndexedDB.
    */
   static async loadModel() {
@@ -321,14 +346,16 @@ export class SaveablePolicyNetwork extends PolicyNetwork {
   /**
    * Get the sizes of the hidden layers.
    *
-   * @returns {number | number[]} If the model has only one hidden layer,
+   * @returns If the model has only one hidden layer,
    *   return the size of the layer as a single number. If the model has
    *   multiple hidden layers, return the sizes as an Array of numbers.
    */
   hiddenLayerSizes() {
-    const sizes = []
+    const sizes: number | number[] = []
     for (let i = 0; i < this.policyNet.layers.length - 1; ++i) {
-      sizes.push(this.policyNet.layers[i].units)
+      // FIXME: as any
+      const layer = this.policyNet.layers[i] as any
+      sizes.push(layer.units)
     }
     return sizes.length === 1 ? sizes[0] : sizes
   }
@@ -340,9 +367,9 @@ export class SaveablePolicyNetwork extends PolicyNetwork {
  * @param {number[]} rewards The reward values to be discounted.
  * @param {number} discountRate Discount rate: a number between 0 and 1, e.g.,
  *   0.95.
- * @returns {tf.Tensor} The discounted reward values as a 1D tf.Tensor.
+ * @returns The discounted reward values as a 1D tf.Tensor.
  */
-function discountRewards(rewards, discountRate) {
+function discountRewards(rewards: number[], discountRate: number) {
   const discountedBuffer = tf.buffer([rewards.length])
   let prev = 0
   for (let i = rewards.length - 1; i >= 0; --i) {
@@ -365,12 +392,14 @@ function discountRewards(rewards, discountRate) {
  * @param {number[][]} rewardSequences Sequences of reward values.
  * @param {number} discountRate Discount rate: a number between 0 and 1, e.g.,
  *   0.95.
- * @returns {tf.Tensor[]} The discounted and normalize reward values as an
- *   Array of tf.Tensor.
+ * @returns The discounted and normalize reward values as an Array of tf.Tensor.
  */
-function discountAndNormalizeRewards(rewardSequences, discountRate) {
+function discountAndNormalizeRewards(
+  rewardSequences: Array<number[]>,
+  discountRate: number
+) {
   return tf.tidy(() => {
-    const discounted = []
+    const discounted: tf.Tensor[] = []
     for (const sequence of rewardSequences) {
       discounted.push(discountRewards(sequence, discountRate))
     }
@@ -396,12 +425,14 @@ function discountAndNormalizeRewards(rewardSequences, discountRate) {
  * @param {tf.Tensor[]} normalizedRewards An Array of normalized reward values
  *   for all the games. Each element of the Array is a 1D tf.Tensor of which
  *   the length equals the number of steps in the game.
- * @returns {{[varName: string]: tf.Tensor}} Scaled and averaged gradients
- *   for the variables.
+ * @returns Scaled and averaged gradients for the variables.
  */
-function scaleAndAverageGradients(allGradients, normalizedRewards) {
+function scaleAndAverageGradients(
+  allGradients: { [varName: string]: Array<tf.Tensor[]> },
+  normalizedRewards: tf.Tensor[]
+) {
   return tf.tidy(() => {
-    const gradients = {}
+    const gradients: { [varName: string]: tf.Tensor } = {}
     for (const varName in allGradients) {
       gradients[varName] = tf.tidy(() => {
         // Stack gradients together.
@@ -410,7 +441,7 @@ function scaleAndAverageGradients(allGradients, normalizedRewards) {
         )
         // Expand dimensions of reward tensors to prepare for multiplication
         // with broadcasting.
-        const expandedDims = []
+        const expandedDims: Array<number> = []
         for (let i = 0; i < varGradients[0].rank - 1; ++i) {
           expandedDims.push(1)
         }
