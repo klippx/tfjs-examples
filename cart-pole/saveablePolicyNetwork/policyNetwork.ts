@@ -79,13 +79,13 @@ export class PolicyNetwork {
    *   in this round of training.
    */
   interface
-  async train(
-    cartPoleSystem: System,
+  async train<T extends System>(
+    cartPoleSystem: T,
     optimizer: tf.Optimizer,
     discountRate: number,
     numGames: number,
     maxStepsPerGame: number,
-    render: (system: System) => Promise<void>,
+    render: (system: T) => Promise<void>,
     onGameEnd: (gameCount: number, totalGames: number) => void
   ) {
     const allGradients: { [name: string]: Array<tf.Tensor[]> } = {}
