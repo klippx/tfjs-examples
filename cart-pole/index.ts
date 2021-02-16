@@ -196,15 +196,14 @@ class PolicyNetwork {
     return gameSteps
   }
 
-  getGradientsAndSaveActions(inputTensor) {
+  getGradientsAndSaveActions(inputTensor: tf.Tensor2D) {
     const f = () =>
       tf.tidy(() => {
         const [logits, actions] = this.getLogitsAndActions(inputTensor)
-        const leAction = actions as tf.Tensor<tf.Rank.R2>
-        this.currentActions_ = leAction.dataSync()
+        this.currentActions_ = actions.dataSync()
         const labels = tf.sub(
           1,
-          tf.tensor2d(this.currentActions_, leAction.shape)
+          tf.tensor2d(this.currentActions_, actions.shape)
         )
         return tf.losses.sigmoidCrossEntropy(labels, logits).asScalar()
       })
@@ -223,29 +222,26 @@ class PolicyNetwork {
    *   1. The logits tensor, of shape `[batchSize, 1]`.
    *   2. The actions tensor, of shape `[batchSize, 1]`.
    */
-  getLogitsAndActions(
-    inputs: tf.Tensor
-  ): [tf.Tensor<tf.Rank>, tf.Tensor<tf.Rank.R2>] {
+  getLogitsAndActions(inputs: tf.Tensor): [tf.Tensor, tf.Tensor2D] {
     return tf.tidy(() => {
       // FIXME: as tf.Tensor<tf.Rank>
-      const logits = this.policyNet.predict(inputs) as tf.Tensor<tf.Rank>
+      const logits = this.policyNet.predict(inputs) as tf.Tensor
 
       // Get the probability of the leftward action.
       const leftProb = tf.sigmoid(logits)
 
       // Probabilites of the left and right actions.
       // FIXME: as tf.Tensor2D
-      // REVIEW: Is it tf.Tensor1D?
       const leftRightProbs = tf.concat(
         [leftProb, tf.sub(1, leftProb)],
         1
       ) as tf.Tensor2D
-      const actions = ((tf.multinomial(
+      const actions: tf.Tensor2D = tf.multinomial(
         leftRightProbs,
         1,
         undefined,
         true
-      ) as tf.Tensor2D) as unknown) as tf.Tensor<tf.Rank.R2>
+      ) as tf.Tensor2D
       return [logits, actions]
     })
   }

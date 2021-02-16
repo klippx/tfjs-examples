@@ -42,8 +42,8 @@ export class CartPole {
   private massCart: number
   private massPole: number
   private totalMass: number
-  private cartWidth: number
-  private cartHeight: number
+  public cartWidth: number
+  public cartHeight: number
   private length: number
   private poleMoment: number
   private forceMag: number
