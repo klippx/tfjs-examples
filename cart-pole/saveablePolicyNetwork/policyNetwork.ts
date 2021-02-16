@@ -25,7 +25,7 @@ export class PolicyNetwork {
    *   - An Array of numbers (for any number of hidden layers).
    *   - An instance of tf.LayersModel.
    */
-  constructor(hiddenLayerSizesOrModel) {
+  constructor(hiddenLayerSizesOrModel: number | number[] | tf.LayersModel) {
     this.currentActions_ = new Uint8Array()
     if (hiddenLayerSizesOrModel instanceof tf.LayersModel) {
       this.policyNet = hiddenLayerSizesOrModel
@@ -178,31 +178,31 @@ export class PolicyNetwork {
   /**
    * Get policy-network logits and the action based on state-tensor inputs.
    *
-   * @param {tf.Tensor} inputs A tf.Tensor instance of shape `[batchSize, 4]`.
+   * @param {tf.Tensor} inputs A tf.Tensor instance of shape `[1, 4]`.
    * @returns {[tf.Tensor, tf.Tensor]}
-   *   1. The logits tensor, of shape `[batchSize, 1]`.
-   *   2. The actions tensor, of shape `[batchSize, 1]`.
+   *   1. The logits tensor, of shape `[1, 1]`.
+   *   2. The actions tensor, of shape `[1, 1]`.
    */
-  getLogitsAndActions(inputs: tf.Tensor): [tf.Tensor, tf.Tensor2D] {
+  getLogitsAndActions(inputs: tf.Tensor2D): [tf.Tensor, tf.Tensor2D] {
     return tf.tidy(() => {
-      // FIXME: as tf.Tensor<tf.Rank>
-      const logits = this.policyNet.predict(inputs) as tf.Tensor
+      const logits = this.policyNet.predict(inputs) as tf.Tensor2D
 
-      // Get the probability of the leftward action.
+      // Get the probability of the leftward action, of shape `[1, 2]`.
       const leftProb = tf.sigmoid(logits)
 
-      // Probabilites of the left and right actions.
-      // FIXME: as tf.Tensor2D
-      const leftRightProbs = tf.concat(
-        [leftProb, tf.sub(1, leftProb)],
+      // Probabilites of the left and right actions, of shape `[1, 2]`.
+      const leftRightProbs = tf.concat2d(
+        [leftProb, tf.sub<tf.Tensor2D>(1, leftProb)],
         1
-      ) as tf.Tensor2D
+      )
+
       const actions: tf.Tensor2D = tf.multinomial(
         leftRightProbs,
         1,
         undefined,
         true
       ) as tf.Tensor2D
+
       return [logits, actions]
     })
   }
@@ -214,8 +214,9 @@ export class PolicyNetwork {
    * @param {Float32Array} inputs The actions for the inputs, with length
    *   `batchSize`.
    */
-  getActions(inputs: tf.Tensor) {
-    return this.getLogitsAndActions(inputs)[1].dataSync()
+  getActions(inputs: tf.Tensor2D) {
+    const [_logits, actions] = this.getLogitsAndActions(inputs)
+    return actions.dataSync()
   }
 
   /**

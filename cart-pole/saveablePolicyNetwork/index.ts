@@ -70,7 +70,7 @@ export class SaveablePolicyNetwork extends PolicyNetwork {
   hiddenLayerSizes() {
     const sizes: number | number[] = []
     for (let i = 0; i < this.policyNet.layers.length - 1; ++i) {
-      // FIXME: as any
+      // `units` does not exist on Layer (!?)
       const layer = this.policyNet.layers[i] as any
       sizes.push(layer.units)
     }
