@@ -20,6 +20,7 @@
  */
 
 import * as tf from '@tensorflow/tfjs'
+import { System } from './saveablePolicyNetwork/system'
 
 /**
  * Cart-pole system simulator.
@@ -36,7 +37,7 @@ import * as tf from '@tensorflow/tfjs'
  *
  *   - leftward or rightward force.
  */
-export class CartPole {
+export class CartPole implements System {
   // Constants that characterize the system.
   private gravity: number
   private massCart: number

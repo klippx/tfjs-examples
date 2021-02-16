@@ -19,7 +19,8 @@ import * as tf from '@tensorflow/tfjs'
 import * as tfvis from '@tensorflow/tfjs-vis'
 
 import { CartPole } from './cart_pole'
-import { SaveablePolicyNetwork } from './index'
+import { System } from './saveablePolicyNetwork/system'
+import { SaveablePolicyNetwork } from './saveablePolicyNetwork'
 import { mean, sum } from './utils'
 
 const getElementById = (id: string) => {
@@ -83,7 +84,7 @@ function logStatus(message: string) {
 
 // Objects and functions to support display of cart pole status during training.
 let renderDuringTraining = true
-export async function maybeRenderDuringTraining(cartPole: CartPole) {
+async function maybeRenderDuringTraining(cartPole: System) {
   if (renderDuringTraining) {
     renderCartPole(cartPole, cartPoleCanvas)
     await tf.nextFrame() // Unblock UI thread.
@@ -98,7 +99,7 @@ export async function maybeRenderDuringTraining(cartPole: CartPole) {
  * @param {number} totalGames Total number of games to complete in the current
  *   iteration of training.
  */
-export function onGameEnd(gameCount: number, totalGames: number) {
+function onGameEnd(gameCount: number, totalGames: number) {
   iterationStatus.textContent = `Game ${gameCount} of ${totalGames}`
   iterationProgress.value = (gameCount / totalGames) * 100
   if (gameCount === totalGames) {
@@ -350,7 +351,9 @@ export async function setUpUI() {
             optimizer,
             discountRate,
             gamesPerIteration,
-            maxStepsPerGame
+            maxStepsPerGame,
+            maybeRenderDuringTraining,
+            onGameEnd
           )
           const t1 = new Date().getTime()
           const stepsPerSecond = sum(gameSteps) / ((t1 - t0) / 1e3)
