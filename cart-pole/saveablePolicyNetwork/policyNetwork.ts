@@ -105,16 +105,13 @@ export class PolicyNetwork {
 
   async train<T extends System>(
     cartPoleSystem: T,
+    optimizer: tf.Optimizer,
     discountRate: number,
-    learningRate: number,
     numGames: number,
     maxStepsPerGame: number,
     render: (system: T) => Promise<void>,
     onGameEnd: (gameCount: number, totalGames: number) => void
   ) {
-    // Need to cast to Optimizer or typings will break. I could not fix these typings
-    // as not enough are exported from tf. Perhaps this is fixed in later versions of tf.
-    const optimizer = tf.train.adam(learningRate) as tf.Optimizer
     const allGradients: { [name: string]: Array<tf.Tensor[]> } = {}
     const allRewards: Array<number[]> = []
     const gameSteps: Array<number> = []

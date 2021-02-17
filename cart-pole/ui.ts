@@ -228,16 +228,18 @@ export async function setUpUI() {
           'Training policy network... Please wait. ' +
             'Network is saved to IndexedDB at the end of each iteration.'
         )
+        const optimizer = tf.train.adam(learningRate)
 
         meanStepValues = []
         onIterationEnd(0, trainIterations)
+
         let t0 = new Date().getTime()
         stopRequested = false
         for (let i = 0; i < trainIterations; ++i) {
           const gameSteps = await policyNet.train(
             cartPole,
+            optimizer,
             discountRate,
-            learningRate,
             gamesPerIteration,
             maxStepsPerGame,
             // render cb:
