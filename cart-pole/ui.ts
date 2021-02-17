@@ -169,7 +169,13 @@ export async function setUpUI() {
           }
           return num
         })
-      policyNet = new SaveablePolicyNetwork(hiddenLayerSizes)
+      policyNet = new SaveablePolicyNetwork({
+        sizes: {
+          hiddenLayerSizes,
+          inputSize: 4,
+          outputSize: 1,
+        },
+      })
       console.log('DONE constructing new instance of SaveablePolicyNetwork')
       await updateUIControlState()
     } catch (err) {
@@ -178,10 +184,14 @@ export async function setUpUI() {
   })
 
   deleteStoredModelButton.addEventListener('click', async () => {
-    if (confirm(`Are you sure you want to delete the locally-stored model?`)) {
-      await policyNet?.removeModel()
-      policyNet = null
-      await updateUIControlState()
+    if (policyNet !== null) {
+      if (
+        confirm(`Are you sure you want to delete the locally-stored model?`)
+      ) {
+        await policyNet.removeModel()
+        policyNet = null
+        await updateUIControlState()
+      }
     }
   })
 
@@ -191,7 +201,7 @@ export async function setUpUI() {
     } else {
       disableModelControls()
       if (policyNet === null) {
-        throw new Error(`Invalid policyNet: ${policyNet}`)
+        throw new Error(`Can not train with invalid policyNet: ${policyNet}`)
       }
       try {
         const trainIterations = Number.parseInt(numIterationsInput.value)
@@ -218,7 +228,6 @@ export async function setUpUI() {
           'Training policy network... Please wait. ' +
             'Network is saved to IndexedDB at the end of each iteration.'
         )
-        const optimizer = tf.train.adam(learningRate)
 
         meanStepValues = []
         onIterationEnd(0, trainIterations)
@@ -227,16 +236,18 @@ export async function setUpUI() {
         for (let i = 0; i < trainIterations; ++i) {
           const gameSteps = await policyNet.train(
             cartPole,
-            optimizer,
             discountRate,
+            learningRate,
             gamesPerIteration,
             maxStepsPerGame,
+            // render cb:
             async (system) => {
               if (renderDuringTraining) {
                 system.render(cartPoleCanvas)
                 await tf.nextFrame() // Unblock UI thread.
               }
             },
+            // onGameEnd cb:
             (gameCount, totalGames) => {
               iterationStatus.textContent = `Game ${gameCount} of ${totalGames}`
               iterationProgress.value = (gameCount / totalGames) * 100

@@ -25,12 +25,26 @@ export class PolicyNetwork {
    *   - An Array of numbers (for any number of hidden layers).
    *   - An instance of tf.LayersModel.
    */
-  constructor(hiddenLayerSizesOrModel: number | number[] | tf.LayersModel) {
+  constructor({
+    layersModel,
+    sizes,
+  }: {
+    layersModel?: tf.LayersModel
+    sizes?: {
+      hiddenLayerSizes: number | number[]
+      inputSize: number
+      outputSize: number
+    }
+  }) {
     this.currentActions_ = new Uint8Array()
-    if (hiddenLayerSizesOrModel instanceof tf.LayersModel) {
-      this.policyNet = hiddenLayerSizesOrModel
+    if (layersModel instanceof tf.LayersModel) {
+      this.policyNet = layersModel
+    } else if (sizes !== undefined) {
+      this.policyNet = this.createPolicyNetwork(sizes)
     } else {
-      this.policyNet = this.createPolicyNetwork(hiddenLayerSizesOrModel)
+      throw new Error(
+        `Unable to create instance of PolicyNetwork: Invalid params`
+      )
     }
   }
 
@@ -41,25 +55,34 @@ export class PolicyNetwork {
    *   a single number (for a single hidden layer) or an Array of numbers (for
    *   any number of hidden layers).
    */
-  createPolicyNetwork(hiddenLayerSizes: number | number[]) {
+  createPolicyNetwork({
+    hiddenLayerSizes,
+    inputSize,
+    outputSize,
+  }: {
+    hiddenLayerSizes: number | number[]
+    inputSize: number
+    outputSize: number
+  }) {
     if (!Array.isArray(hiddenLayerSizes)) {
       hiddenLayerSizes = [hiddenLayerSizes]
     }
-    // this.policyNet = tf.sequential()
+
     const network = tf.sequential()
+
     hiddenLayerSizes.forEach((hiddenLayerSize, i) => {
       network.add(
         tf.layers.dense({
           units: hiddenLayerSize,
           activation: 'elu',
-          // `inputShape` is required only for the first layer.
-          inputShape: i === 0 ? [4] : undefined,
+          // The first layer has ${inputSize} units.
+          inputShape: i === 0 ? [inputSize] : undefined,
         })
       )
     })
-    // The last layer has only one unit. The single output number will be
-    // converted to a probability of selecting the leftward-force action.
-    network.add(tf.layers.dense({ units: 1 }))
+    // The last layer has ${outputSize} units.
+    // The single output number will be converted to a probability of selecting the leftward-force action.
+    network.add(tf.layers.dense({ units: outputSize }))
     return network
   }
 
@@ -82,13 +105,16 @@ export class PolicyNetwork {
 
   async train<T extends System>(
     cartPoleSystem: T,
-    optimizer: tf.Optimizer,
     discountRate: number,
+    learningRate: number,
     numGames: number,
     maxStepsPerGame: number,
     render: (system: T) => Promise<void>,
     onGameEnd: (gameCount: number, totalGames: number) => void
   ) {
+    // Need to cast to Optimizer or typings will break. I could not fix these typings
+    // as not enough are exported from tf. Perhaps this is fixed in later versions of tf.
+    const optimizer = tf.train.adam(learningRate) as tf.Optimizer
     const allGradients: { [name: string]: Array<tf.Tensor[]> } = {}
     const allRewards: Array<number[]> = []
     const gameSteps: Array<number> = []

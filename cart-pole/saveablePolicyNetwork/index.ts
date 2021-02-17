@@ -11,10 +11,24 @@ export class SaveablePolicyNetwork extends PolicyNetwork {
   /**
    * Constructor of SaveablePolicyNetwork
    *
-   * @param {number | number[]} hiddenLayerSizesOrModel
+   * @param {number | number[]} hiddenLayerSizes
    */
-  constructor(hiddenLayerSizesOrModel: number | number[] | tf.LayersModel) {
-    super(hiddenLayerSizesOrModel)
+  constructor({
+    layersModel,
+    sizes,
+  }: {
+    layersModel?: tf.LayersModel
+    sizes?: {
+      hiddenLayerSizes: number | number[]
+      inputSize: number
+      outputSize: number
+    }
+  }) {
+    if (layersModel !== undefined) {
+      super({ layersModel })
+    } else if (sizes !== undefined) {
+      super({ sizes })
+    }
   }
 
   /**
@@ -34,9 +48,9 @@ export class SaveablePolicyNetwork extends PolicyNetwork {
     const modelsInfo = await tf.io.listModels()
     if (MODEL_SAVE_PATH_ in modelsInfo) {
       console.log(`Loading existing model...`)
-      const model = await tf.loadLayersModel(MODEL_SAVE_PATH_)
+      const layersModel = await tf.loadLayersModel(MODEL_SAVE_PATH_)
       console.log(`Loaded model from ${MODEL_SAVE_PATH_}`)
-      return new SaveablePolicyNetwork(model)
+      return new SaveablePolicyNetwork({ layersModel })
     } else {
       throw new Error(`Cannot find model at ${MODEL_SAVE_PATH_}.`)
     }
